@@ -1,17 +1,15 @@
-#include <SFML/Config.hpp>
+#include <math.h>
 #include <SFML/Graphics.hpp>
-#include <SFML/Graphics/Image.hpp>
-#include <SFML/Graphics/Rect.hpp>
-#include <SFML/Graphics/Sprite.hpp>
-#include <SFML/Graphics/Texture.hpp>
+#include <SFML/Graphics/Color.hpp>
+#include <SFML/Graphics/RectangleShape.hpp>
+#include <SFML/Graphics/Transform.hpp>
+#include <SFML/Graphics/Vertex.hpp>
+#include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/Keyboard.hpp>
-#include <SFML/Window/Mouse.hpp>
-#include <cstddef>
-#include <numbers>
-#include "framebuffer.h++"
-#include "map.h++"
-#include "player.h++"
+#include <chrono>
+#include <cmath>
+#include <string>
 
 const size_t map_w = 16;
 const size_t map_h = 16;
@@ -19,15 +17,15 @@ const size_t map_h = 16;
 // clang-format off
 const int map[map_w*map_h] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1,
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 4, 0, 0, 4, 2, 2, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 4, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 4, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
@@ -37,120 +35,221 @@ const int map[map_w*map_h] = {
 };
 // clang-format on
 
+const auto W = 640;
+const auto H = 480;
+
+struct Player {
+    sf::Vector2f position;
+    sf::Vector2f direction;
+
+    //    private:
+    sf::Vector2f camera;  // camera plane (line)
+
+    Player() : position(sf::Vector2f(22, 12)), direction(sf::Vector2f(-1, 0)), camera(sf::Vector2f(0, 1)){};
+
+    void moveForward(float speed);
+    void moveBackwards(float speed);
+    void rotateLeft(float speed);
+    void rotateRight(float speed);
+};
+
+void Player::moveForward(float speed) {
+    position += speed * direction;
+}
+
+void Player::moveBackwards(float speed) {
+    position -= speed * direction;
+}
+
+void Player::rotateLeft(float speed) {
+    auto oldDirectionX = direction.x;
+
+    direction.x = direction.x * cos(speed) - direction.y * sin(speed);
+    direction.y = oldDirectionX * sin(speed) + direction.y * cos(speed);
+
+    auto oldCameraX = camera.x;
+    camera.x = camera.x * cos(speed) - camera.y * sin(speed);
+    camera.y = oldCameraX * sin(speed) + camera.y * cos(speed);
+}
+
+void Player::rotateRight(float speed) {
+    speed = -speed;
+
+    auto oldDirectionX = direction.x;
+
+    direction.x = direction.x * cos(speed) - direction.y * sin(speed);
+    direction.y = oldDirectionX * sin(speed) + direction.y * cos(speed);
+
+    auto oldCameraX = camera.x;
+    camera.x = camera.x * cos(speed) - camera.y * sin(speed);
+    camera.y = oldCameraX * sin(speed) + camera.y * cos(speed);
+}
+
+class Raycaster {
+    void renderFrame();
+};
+
+void Raycaster::renderFrame() {}
+
 int main() {
-    auto fb = Framebuffer(640, 320);
+    sf::RenderWindow window(sf::VideoMode(W, H), "BESHRAY");
 
-    float player_x = 3.456;
-    float player_y = 2.345;
-    float player_a = 1.523;
-    float deltaX = cos(player_a);
-    float deltaY = sin(player_a);
+    auto player = Player();
 
-    const float fov = 90 * (std::numbers::pi / 180);
+    // this are VECTORS
+    float posX = 22, posY = 12;    // player start position
+    float dirX = -1, dirY = 0;     // direction vector for player
+    float planeX = 0, planeY = 1;  // camera plane
 
-    sf::RenderWindow window(sf::VideoMode(fb.w, fb.h), "BESHRAY");
-    window.setFramerateLimit(30);
+    std::chrono::high_resolution_clock::time_point start;
+    std::chrono::high_resolution_clock::time_point end;
+    float fps;
 
     while (window.isOpen()) {
+        start = std::chrono::high_resolution_clock::now();
+
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed)
                 window.close();
 
+            const auto speed = 0.4;
+            const auto rotSpeed = 0.2;
+
             if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::W) {
-                    player_x += deltaX;
-                    player_y += deltaY;
-                }
-                if (event.key.code == sf::Keyboard::A) {
-                    player_a -= 0.1;
-                    if (player_a < 0) {
-                        player_a += 2 * 3.14;
-                    }
-                    deltaX = cos(player_a);
-                    deltaY = sin(player_a);
-                }
-                if (event.key.code == sf::Keyboard::S) {
-                    player_x -= deltaX;
-                    player_y -= deltaY;
-                }
-                if (event.key.code == sf::Keyboard::D) {
-                    player_a += 0.1;
-                    if (player_a < 0) {
-                        player_a += 2 * 3.14;
-                    }
-                    deltaX = cos(player_a);
-                    deltaY = sin(player_a);
-                }
+                if (event.key.code == sf::Keyboard::W)
+                    player.moveForward(speed);
+                if (event.key.code == sf::Keyboard::S)
+                    player.moveBackwards(speed);
+                if (event.key.code == sf::Keyboard::D)
+                    player.rotateRight(rotSpeed);
+                if (event.key.code == sf::Keyboard::A)
+                    player.rotateLeft(rotSpeed);
             }
         }
 
-        {
-            fb.clear();
+        window.clear(sf::Color::Black);
 
-            const size_t rect_w = fb.w / (map_w * 2);
-            const size_t rect_h = fb.h / map_h;
+        for (int x = 0; x < W; x++) {
+            // ray position and direction
+            float camX = 2 * x / float(W) - 1;  // x-coordinate in camera plane(line). 1 - top right, 0 - center, -1 - top left
+            // v = planeDir, d = dir, p = plane, c = camX (scalar)
+            //             _   _    _
+            // this means: v = d + cp
+            float rayDirX = dirX + planeX * camX;
+            float rayDirY = dirY + planeY * camX;
 
-            for (size_t j = 0; j < map_h; j++) {
-                for (size_t i = 0; i < map_w; i++) {
-                    if (map[i + j * map_w] == 0)
-                        continue;
+            // which box of the map we're in
+            int mapX = static_cast<int>(posX);
+            int mapY = static_cast<int>(posY);
 
-                    size_t rect_x = i * rect_w;
-                    size_t rect_y = j * rect_h;
-                    fb.setRectangle(rect_x, rect_y, rect_w, rect_h, RGB{0, 255, 255, 255});
-                }
+            // length of ray from current position to next x or y-side
+            float sideDistX;
+            float sideDistY;
+
+            // length of ray from one x or y-side to next x or y-side
+            float deltaDistX = /*(rayDirX == 0) ? 1e30 :*/ std::abs(1 / rayDirX);
+            float deltaDistY = /*(rayDirY == 0) ? 1e30 :*/ std::abs(1 / rayDirY);
+            float perpWallDist;
+
+            // what direction to step in x or y-direction (either +1 or -1)
+            int stepX;
+            int stepY;
+
+            int hit = 0;  // was there a wall hit?
+            int side;     // was a NS or a EW wall hit?
+
+            // calculate step and initial sideDist
+            if (rayDirX < 0) {
+                stepX = -1;
+                sideDistX = (posX - mapX) * deltaDistX;
+            } else {
+                stepX = 1;
+                sideDistX = (mapX + 1.0 - posX) * deltaDistX;
+            }
+            if (rayDirY < 0) {
+                stepY = -1;
+                sideDistY = (posY - mapY) * deltaDistY;
+            } else {
+                stepY = 1;
+                sideDistY = (mapY + 1.0 - posY) * deltaDistY;
             }
 
-            fb.setRectangle(player_x * rect_w, player_y * rect_h, 5, 5, RGB{255, 255, 255, 255});
-
-            for (size_t i = 0; i < fb.w / 2; i++) {
-                float angle = player_a - fov / 2 + fov * i / (float(fb.w) / 2);
-
-                for (float t = 0; t < 20; t += .05) {
-                    float cx = player_x + t * cos(angle);
-                    float cy = player_y + t * sin(angle);
-
-                    size_t pix_x = cx * rect_w;
-                    size_t pix_y = cy * rect_h;
-                    fb.setPixel(pix_x, pix_y, RGB{160, 160, 160, 255});
-
-                    if (map[int(cx) + int(cy) * map_w] != 0) {
-                        size_t column_height = fb.h / (t * cos(angle - player_a));
-                        fb.setRectangle(fb.w / 2 + i, fb.h / 2 - column_height / 2, 1, column_height, RGB{0, 255, 255, 255});
-                        break;
-                    }
+            // perform DDA
+            while (hit == 0) {
+                // jump to next map square, either in x-direction, or in y-direction
+                if (sideDistX < sideDistY) {
+                    sideDistX += deltaDistX;
+                    mapX += stepX;
+                    side = 0;
+                } else {
+                    sideDistY += deltaDistY;
+                    mapY += stepY;
+                    side = 1;
                 }
+
+                // Check if ray has hit a wall
+                if (map[mapX + mapY * map_w] > 0)
+                    hit = 1;
             }
+
+            // Calculate distance projected on camera direction (Euclidean distance would give fisheye effect!)
+            if (side == 0)
+                perpWallDist = (sideDistX - deltaDistX);
+            else
+                perpWallDist = (sideDistY - deltaDistY);
+
+            // Calculate height of line to draw on screen
+            int lineHeight = (int)(H / perpWallDist);
+
+            // calculate lowest and highest pixel to fill in current stripe
+            int drawEnd = lineHeight / 2 + H / 2;
+            if (drawEnd >= H)
+                drawEnd = H - 1;
+
+            int drawStart = H / 2 - lineHeight / 2;
+            if (drawStart < 0)
+                drawStart = 0;
+
+            sf::Color color;
+            switch (map[mapX + mapY * map_w]) {
+                case 1:
+                    color = sf::Color::Red;
+                    break;
+                case 2:
+                    color = sf::Color::Cyan;
+                    break;
+                case 3:
+                    color = sf::Color::White;
+                    break;
+                case 4:
+                    color = sf::Color::Yellow;
+                    break;
+                default:
+                    color = sf::Color::Magenta;
+                    break;
+            }
+
+            if (side == 1) {
+                color.r /= 2;
+                color.g /= 2;
+                color.b /= 2;
+            }
+
+            // draw vertical line
+            sf::Vertex line[2] = {
+                sf::Vertex(sf::Vector2f(x, drawStart), color),
+                sf::Vertex(sf::Vector2f(x, drawEnd), color),
+            };
+
+            window.draw(line, 2, sf::Lines);
         }
 
-        {
-            size_t i = 0;
-            sf::Uint8* pixels = new sf::Uint8[fb.h * fb.w * 4];
-            for (auto col : fb.image) {
-                pixels[i++] = col.r;
-                pixels[i++] = col.g;
-                pixels[i++] = col.b;
-                pixels[i++] = col.a;
-            }
+        window.display();
 
-            window.clear(sf::Color::Black);
-
-            sf::Image img;
-            img.create(fb.w, fb.h, pixels);
-
-            sf::Texture tex;
-            tex.setSmooth(false);
-            tex.setRepeated(false);
-            tex.loadFromImage(img);
-
-            sf::Sprite spr;
-            spr.setTexture(tex);
-
-            window.draw(spr);
-
-            window.display();
-        }
+        end = std::chrono::high_resolution_clock::now();
+        fps = (float)1e9 / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        window.setTitle(std::to_string(fps));
     }
 
     return 0;

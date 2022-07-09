@@ -6,9 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(SOURCES
     src/main.c++
-    src/framebuffer.c++
-    src/map.c++
-    src/player.c++
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
