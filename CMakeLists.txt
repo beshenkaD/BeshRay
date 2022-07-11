@@ -15,6 +15,8 @@ target_compile_options(${PROJECT_NAME}
     -Wall 
     -Wextra 
     -Wpedantic 
+    -Wno-unused-variable
+    -Wno-unused-but-set-variable
     $<$<CONFIG:DEBUG>: -Werror>
 )
 
