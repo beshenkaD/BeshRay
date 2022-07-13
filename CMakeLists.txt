@@ -2,10 +2,11 @@ cmake_minimum_required(VERSION 3.5)
 
 project(beshray)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 set(SOURCES
     src/main.c++
+    src/map.c++
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -15,9 +16,6 @@ target_compile_options(${PROJECT_NAME}
     -Wall 
     -Wextra 
     -Wpedantic 
-    -Wno-unused-variable
-    -Wno-unused-but-set-variable
-    $<$<CONFIG:DEBUG>: -Werror>
 )
 
 find_package(SFML COMPONENTS system window audio graphics REQUIRED)
