@@ -26,7 +26,7 @@ Map::Map(const std::string& filename) {
         sf::Image tex;
 
         std::string path = rawPath.get<std::string>();
-        path = "../pics/" + path;
+        path = "../resources/" + path;
 
         if (!tex.loadFromFile(path)) {
             abort();
