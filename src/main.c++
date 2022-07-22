@@ -1,69 +1,14 @@
-#include <SFML/Config.hpp>
 #include <SFML/Graphics.hpp>
-#include <SFML/Graphics/Image.hpp>
-#include <SFML/Graphics/PrimitiveType.hpp>
-#include <SFML/Graphics/Sprite.hpp>
-#include <SFML/Graphics/Texture.hpp>
-#include <SFML/Graphics/VertexArray.hpp>
-#include <SFML/System/Vector2.hpp>
 #include <chrono>
 #include <cmath>
-#include <cstddef>
-#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
-#include <numbers>
 #include <string>
-#include <unordered_map>
-#include <vector>
 #include "map.h++"
 
-// const size_t map_w = 16;
-// const size_t map_h = 16;
-
-// // clang-format off
-// const int map[map_w*map_h] = {
-//     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-//     1, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 4, 0, 0, 4, 2, 2, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 4, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 4, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-//     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-// };
-// // clang-format on
-
-const auto W = 1280;
-const auto H = 720;
-
-// const auto TEX_SIZE = 512;
-// const auto TEX_WALL = 128;
-
-// enum class WallTexture {
-//     Smiley,
-//     Red,
-//     Bush,
-//     Sky,
-//     Pink,
-//     Wallpaper,
-//     Dirt,
-//     Exit,
-// };
-
-// const std::unordered_map<int, WallTexture> textureTypes{
-//     {0, WallTexture::Pink}, {1, WallTexture::Dirt}, {2, WallTexture::Wallpaper}, {3, WallTexture::Bush},
-//     {4, WallTexture::Sky},  {5, WallTexture::Red},  {6, WallTexture::Smiley},    {7, WallTexture::Exit},
-// };
+const auto W = 960;
+const auto H = 540;
 
 struct Player {
     sf::Vector2f position;
@@ -72,7 +17,10 @@ struct Player {
     //    private:
     sf::Vector2f camera;  // camera plane (line)
 
-    // float height = 0.666;
+    // TEST
+    float pitch = 0;
+    float posZ = 0;
+    // TEST END
 
     Player() : position(sf::Vector2f(22, 12)), direction(sf::Vector2f(-1, 0)), camera(sf::Vector2f(0, 1)){};
 
@@ -80,10 +28,22 @@ struct Player {
     void moveBackwards(float speed);
     void rotateLeft(float speed);
     void rotateRight(float speed);
+    void pitchUp(float amount);
+    void pitchDown(float amount);
+    void moveUp(float speed);
+    void moveDown(float speed);
 
    private:
     sf::Vector2f rotate(sf::Vector2f& v, float angle);
 };
+
+void Player::pitchUp(float amount) {
+    pitch += amount;
+}
+
+void Player::pitchDown(float amount) {
+    pitch -= amount;
+}
 
 void Player::moveForward(float speed) {
     position += speed * direction;
@@ -91,6 +51,14 @@ void Player::moveForward(float speed) {
 
 void Player::moveBackwards(float speed) {
     position -= speed * direction;
+}
+
+void Player::moveUp(float speed) {
+    posZ += speed;
+}
+
+void Player::moveDown(float speed) {
+    posZ -= speed;
 }
 
 sf::Vector2f Player::rotate(sf::Vector2f& v, float angle) {
@@ -115,30 +83,35 @@ void Player::rotateRight(float speed) {
 }
 
 class Raycaster {
-    sf::VertexArray buffer;
+   private:
+    // move it to another class
+    sf::Uint8* pixelBuffer;
+    sf::Texture pixelBufferTex;
 
-    std::vector<float> distTable;
-
-    void calculateDistTable();
+    void plotPixel(int x, int y, sf::Color c);
 
    public:
     Raycaster() {
-        buffer = sf::VertexArray(sf::PrimitiveType::Points, W * H);
-
-        calculateDistTable();
+        pixelBuffer = new sf::Uint8[W * H * 4];
+        pixelBufferTex.create(W, H);
     };
+
+    ~Raycaster() { delete[] pixelBuffer; }
 
     void renderFrame(sf::RenderWindow& window, Player& player, Map& map);
 };
 
-void Raycaster::calculateDistTable() {
-    for (int y = 0; y < H; y++) {
-        distTable.push_back(H / (2.0 * y - H));
-    }
+void Raycaster::plotPixel(int x, int y, sf::Color c) {
+    unsigned int index = (y * (W * 4)) + (x * 4);
+    pixelBuffer[index] = c.r;
+    pixelBuffer[index + 1] = c.g;
+    pixelBuffer[index + 2] = c.b;
+    pixelBuffer[index + 3] = c.a;
 }
 
 void Raycaster::renderFrame(sf::RenderWindow& window, Player& player, Map& map) {
-    buffer.resize(0);
+    // buffer.resize(0);
+    memset(pixelBuffer, 0, W * H * 4 * sizeof(sf::Uint8));
 
     // draw sky
     // for (int x = 0; x < W; x++) {
@@ -212,13 +185,13 @@ void Raycaster::renderFrame(sf::RenderWindow& window, Player& player, Map& map) 
         int lineHeight = static_cast<int>(H / perpWallDist);
 
         // calculate lowest and highest pixel to fill in current stripe
-        int drawEnd = lineHeight / 2 + H / 2;
-        if (drawEnd >= H)
-            drawEnd = H - 1;
-
-        int drawStart = H / 2 - lineHeight / 2;
+        int drawStart = -(lineHeight >> 1) + (H >> 1) + player.pitch + (player.posZ / perpWallDist);
         if (drawStart < 0)
             drawStart = 0;
+
+        int drawEnd = (lineHeight >> 1) + (H >> 1) + player.pitch + (player.posZ / perpWallDist);
+        if (drawEnd >= H)
+            drawEnd = H - 1;
 
         // RENDERING WALLS
         // textures
@@ -239,25 +212,18 @@ void Raycaster::renderFrame(sf::RenderWindow& window, Player& player, Map& map) 
         }
 
         float texStep = 1.0f * wallTexture->getSize().y / lineHeight;
-        float texPos = (drawStart - H / 2 + lineHeight / 2) * texStep;
+        // float texPos = (drawStart - H / 2 + lineHeight / 2) * texStep;
+        float texPos = (drawStart - player.pitch - (player.posZ / perpWallDist) - (H >> 1) + (lineHeight >> 1)) * texStep;
 
-        for (int y = drawStart; y < drawEnd; y++) {
+        for (int y = drawStart; y < drawEnd + 1; y++) {
             int texY = (int)texPos & (wallTexture->getSize().y - 1);
             texPos += texStep;
 
-            buffer.append(sf::Vertex(sf::Vector2f(x, y), wallTexture->getPixel(texX, texY)));
-        }
+            // buffer.append(sf::Vertex(sf::Vector2f(x, y), wallTexture->getPixel(texX, texY) * color_));
+            auto c = wallTexture->getPixel(texX, texY);
 
-        // shading
-        auto color_ = sf::Color::White;
-        if (side) {
-            color_.r >>= 1;
-            color_.g >>= 1;
-            color_.b >>= 1;
+            plotPixel(x, y, c);
         }
-
-        // lines.append(sf::Vertex(sf::Vector2f(x, drawStart), color_, sf::Vector2f(texCoords.x, texCoords.y)));
-        // lines.append(sf::Vertex(sf::Vector2f(x, drawEnd), color_, sf::Vector2f(texCoords.x, texCoords.y + TEX_WALL)));
 
         // // FLOOR
         float floorXWall, floorYWall;  // x, y position of the floor texel at the bottom of the wall
@@ -287,7 +253,9 @@ void Raycaster::renderFrame(sf::RenderWindow& window, Player& player, Map& map) 
 
         // draw the floor from drawEnd to the bottom of the screen
         for (int y = drawEnd + 1; y < H; y++) {
-            float currentDist = distTable[y];
+            // float currentDist = distTable[y];
+            // float currentDist = (H - (2.0 * player.posZ)) / (H - 2.0 * (y - player.pitch)); // ceiling
+            float currentDist = (H + (2.0 * player.posZ)) / (2.0 * (y - player.pitch) - H);
 
             float weight = (currentDist - distPlayer) / (distWall - distPlayer);
 
@@ -299,24 +267,49 @@ void Raycaster::renderFrame(sf::RenderWindow& window, Player& player, Map& map) 
                 continue;
 
             int floorTexX, floorTexY;
-            floorTexX = int(currentFloorX * 64) % 64;
-            floorTexY = int(currentFloorY * 64) % 64;
+            // TODO: get texture size
+            floorTexX = int(currentFloorX * 64) & 63;
+            floorTexY = int(currentFloorY * 64) & 63;
 
             // floor
-            if (currentTile.floor)
-                buffer.append(sf::Vertex(sf::Vector2f(x, y - 1), currentTile.floor->getPixel(floorTexX, floorTexY)));
+            if (currentTile.floor) {
+                auto c = currentTile.floor->getPixel(floorTexX, floorTexY);
+                plotPixel(x, y, c);
+            }
+        }
 
-            // ceil (currently symmetrycal)
-            if (currentTile.ceiling)
-                buffer.append(sf::Vertex(sf::Vector2f(x, H - y + 1), currentTile.ceiling->getPixel(floorTexX, floorTexY)));
+        // Draw ceiling
+        for (int y = 0; y < drawStart; y++) {
+            // float currentDist = distTable[y];
+            float currentDist = (H - (2.0 * player.posZ)) / (H - 2.0 * (y - player.pitch));
+
+            float weight = (currentDist - distPlayer) / (distWall - distPlayer);
+
+            float currentFloorX = weight * floorXWall + (1.0 - weight) * player.position.x;
+            float currentFloorY = weight * floorYWall + (1.0 - weight) * player.position.y;
+
+            auto currentTile = map.getTile(currentFloorX, currentFloorY);
+            if (!currentTile.floor && !currentTile.ceiling)
+                continue;
+
+            int floorTexX, floorTexY;
+            floorTexX = int(currentFloorX * 64) & 63;
+            floorTexY = int(currentFloorY * 64) & 63;
+
+            if (currentTile.ceiling) {
+                auto c = currentTile.ceiling->getPixel(floorTexX, floorTexY);
+                plotPixel(x, y, c);
+            }
         }
     }
 
-    window.clear(sf::Color(135, 206, 235));
+    pixelBufferTex.update(pixelBuffer);
 
-    window.draw(buffer);
+    sf::Sprite s(pixelBufferTex);
 
-    window.display();
+    window.draw(s);
+
+    // window.draw(buffer);
 }
 
 int main() {
@@ -353,14 +346,27 @@ int main() {
                     player.rotateRight(0.1);
                 if (event.key.code == sf::Keyboard::A)
                     player.rotateLeft(0.1);
+                if (event.key.code == sf::Keyboard::Up)
+                    player.pitchUp(5);
+                if (event.key.code == sf::Keyboard::Down)
+                    player.pitchDown(5);
+                if (event.key.code == sf::Keyboard::Space)
+                    player.moveUp(1);
+                if (event.key.code == sf::Keyboard::Num0)
+                    player.moveDown(1);
             }
         }
 
+        window.clear(sf::Color(135, 206, 235));
         raycaster.renderFrame(window, player, map);
 
         end = std::chrono::high_resolution_clock::now();
         fps = (float)1e9 / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-        window.setTitle(std::to_string(fps));
+        sf::Text t(std::to_string(fps), font);
+
+        window.draw(t);
+
+        window.display();
     }
 
     return 0;
