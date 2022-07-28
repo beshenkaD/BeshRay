@@ -1,11 +1,17 @@
 #include "map.h++"
 #include <SFML/Graphics.hpp>
+#include <SFML/System/Vector2.hpp>
+#include <SFML/Window/Cursor.hpp>
+#include <SFML/Window/Event.hpp>
+#include <SFML/Window/Mouse.hpp>
+#include <SFML/Window/WindowStyle.hpp>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 const auto W = 960;
 const auto H = 540;
@@ -71,7 +77,8 @@ sf::Vector2f Player::rotate(sf::Vector2f &v, float angle)
 {
     return sf::Vector2f(
         v.x * std::cos(angle) - v.y * std::sin(angle),
-        v.x * std::sin(angle) + v.y * std::cos(angle));
+        v.x * std::sin(angle) + v.y * std::cos(angle)
+    );
 }
 
 void Player::rotateLeft(float speed)
@@ -88,16 +95,24 @@ void Player::rotateRight(float speed)
     camera = rotate(camera, speed);
 }
 
-class Raycaster
-{
+struct Sprite {
+    sf::Vector2f position;
+    std::shared_ptr<sf::Image> texture;
+};
+
+class Raycaster {
 private:
     // move it to another class
     sf::Uint8 *pixelBuffer;
     sf::Texture pixelBufferTex;
 
+    float ZBuffer[W];
+
     void plotPixel(int x, int y, sf::Color c);
 
 public:
+    std::vector<Sprite> sprites;
+
     Raycaster()
     {
         pixelBuffer = new sf::Uint8[W * H * 4];
@@ -160,14 +175,16 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         if (rayDir.x < 0) {
             step.x = -1;
             sideDist.x = (player.position.x - map_.x) * deltaDist.x;
-        } else {
+        }
+        else {
             step.x = 1;
             sideDist.x = (map_.x + 1.0 - player.position.x) * deltaDist.x;
         }
         if (rayDir.y < 0) {
             step.y = -1;
             sideDist.y = (player.position.y - map_.y) * deltaDist.y;
-        } else {
+        }
+        else {
             step.y = 1;
             sideDist.y = (map_.y + 1.0 - player.position.y) * deltaDist.y;
         }
@@ -185,7 +202,8 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                 map_.x += step.x;
                 side = false;
                 perpWallDist = (sideDist.x - deltaDist.x);
-            } else {
+            }
+            else {
                 sideDist.y += deltaDist.y;
                 map_.y += step.y;
                 side = true;
@@ -214,7 +232,8 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         float wallX; // where the wall was hit
         if (!side) {
             wallX = player.position.y + perpWallDist * rayDir.y;
-        } else {
+        }
+        else {
             wallX = player.position.x + perpWallDist * rayDir.x;
         }
         wallX -= std::floor(wallX);
@@ -231,7 +250,6 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         float texPos =
             (drawStart - player.pitch - (player.posZ / perpWallDist) - (H >> 1) + (lineHeight >> 1)) * texStep;
 
-        // NEW 1 loop
         for (int y = 0; y < H; y++) {
             if (y <= drawStart - 1) { // ceiling
                 float currentDist = (H - (2.0 * player.posZ)) / (H - 2.0 * (y - player.pitch));
@@ -254,13 +272,15 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                     auto c = currentTile.ceiling->getPixel(floorTexX, floorTexY);
                     plotPixel(x, y, c);
                 }
-            } else if (y >= drawStart && y <= drawEnd) { // walls
+            }
+            else if (y >= drawStart && y <= drawEnd) { // walls
                 int texY = (int)texPos & (wallTexture->getSize().y - 1);
                 texPos += texStep;
 
                 auto c = wallTexture->getPixel(texX, texY);
                 plotPixel(x, y, c);
-            } else { // floor
+            }
+            else { // floor
                 float currentDist = (H + (2.0 * player.posZ)) / (2.0 * (y - player.pitch) - H);
 
                 // TEST
@@ -290,6 +310,62 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                 }
             }
         }
+
+        ZBuffer[x] = perpWallDist;
+    }
+
+    for (auto &sprite : sprites) {
+        // position relative to camera
+        sf::Vector2f pos = sprite.position - player.position;
+
+        float invDet = 1.0f / (player.camera.x * player.direction.y - player.direction.x * player.camera.y);
+
+        float transformX = invDet * (player.direction.y * pos.x - player.direction.x * pos.y);
+        float transformY = invDet * (-player.camera.y * pos.x + player.camera.x * pos.y);
+
+        int spriteScreenX = int((W / 2) * (1 + transformX / transformY));
+
+        constexpr float vDiv = 1.0f;
+        constexpr float uDiv = 1.0f;
+        constexpr float vMove = 0.0f;
+        int vMoveScreen = int(vMove / transformY) + player.pitch + player.posZ / transformY;
+
+        int spriteHeight = std::abs(int(H / (transformY))) / vDiv;
+
+        int drawStartY = -spriteHeight / 2 + H / 2 + vMoveScreen;
+        if (drawStartY < 0)
+            drawStartY = 0;
+        int drawEndY = spriteHeight / 2 + H / 2 + vMoveScreen;
+        if (drawEndY >= H)
+            drawEndY = H - 1;
+
+        int spriteWidth = abs(int(H / (transformY))) / uDiv;
+        int drawStartX = -spriteWidth / 2 + spriteScreenX;
+        if (drawStartX < 0)
+            drawStartX = 0;
+        int drawEndX = spriteWidth / 2 + spriteScreenX;
+        if (drawEndX >= W)
+            drawEndX = W - 1;
+
+        // loop through every vertical stripe of the sprite on screen
+        for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
+            int texX = int(256 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
+            // the conditions in the if are:
+            // 1) it's in front of camera plane so you don't see things behind you
+            // 2) it's on the screen (left)
+            // 3) it's on the screen (right)
+            // 4) ZBuffer, with perpendicular distance
+            if (transformY > 0 && stripe > 0 && stripe < W && transformY < ZBuffer[stripe])
+                for (int y = drawStartY; y < drawEndY; y++) // for every pixel of the current stripe
+                {
+                    int d = (y - vMoveScreen) * 256 - H * 128 + spriteHeight * 128; // 256 and 128 factors to avoid floats
+                    int texY = ((d * 64) / spriteHeight) / 256;
+
+                    auto c = sprite.texture->getPixel(texX, texY);
+                    if (c.a != 0)
+                        plotPixel(stripe, y, c);
+                }
+        }
     }
 }
 
@@ -306,10 +382,24 @@ int main()
     std::chrono::high_resolution_clock::time_point end;
     float fps;
 
-    window.setFramerateLimit(2000);
+    window.setFramerateLimit(60);
 
     sf::Font font;
     font.loadFromFile("/usr/share/fonts/TTF/DejaVuSerif.ttf");
+
+    sf::Image b;
+    b.loadFromFile("../resources/barrel.png");
+
+    std::shared_ptr<sf::Image> barrel = std::make_shared<sf::Image>(b);
+
+    raycaster.sprites.push_back(Sprite{{22, 10}, barrel});
+    raycaster.sprites.push_back(Sprite{{20, 10}, barrel});
+    raycaster.sprites.push_back(Sprite{{20, 10.5}, barrel});
+    raycaster.sprites.push_back(Sprite{{20, 11}, barrel});
+    raycaster.sprites.push_back(Sprite{{19, 11}, barrel});
+    raycaster.sprites.push_back(Sprite{{19.5, 11}, barrel});
+    raycaster.sprites.push_back(Sprite{{18, 11}, barrel});
+    raycaster.sprites.push_back(Sprite{{18, 11.5}, barrel});
 
     while (window.isOpen()) {
         start = std::chrono::high_resolution_clock::now();
@@ -345,8 +435,8 @@ int main()
 
         end = std::chrono::high_resolution_clock::now();
         fps = (float)1e9 / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-        sf::Text t(std::to_string(fps), font);
 
+        sf::Text t(std::to_string(fps), font);
         window.draw(t);
 
         window.display();
