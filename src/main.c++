@@ -1,4 +1,5 @@
 #include "map.h++"
+#include <SFML/Config.hpp>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Cursor.hpp>
@@ -13,8 +14,25 @@
 #include <string>
 #include <vector>
 
-const auto W = 960;
-const auto H = 540;
+#include "math/vector.h++"
+
+// TODO: move DDA to another function
+//       my own vec2 with implicit convertion to sfml vectors +
+//       detect side of a wall
+//       change 'raycaster' class to 'engine' class
+//       set camera inside engine class
+//       ? thin walls ?
+//       ? 45-degree walls ?
+//       ? pillar-like walls ?
+//       create function to check ray intersection with entity
+//       change formatting to godot-like
+//       add namespace for engine
+//       add interface for isSolid
+//                         plotPixelWall
+//                         plotPixelEntity
+
+const auto W = 1280;
+const auto H = 720;
 
 struct Player {
     sf::Vector2f position;
@@ -28,7 +46,8 @@ struct Player {
     float posZ = 0;
     // TEST END
 
-    Player() : position(sf::Vector2f(22, 12)), direction(sf::Vector2f(-1, 0)), camera(sf::Vector2f(0, 1)){};
+    Player()
+        : position(sf::Vector2f(22, 12)), direction(sf::Vector2f(-1, 0)), camera(sf::Vector2f(0, 1)){};
 
     void moveForward(float speed);
     void moveBackwards(float speed);
@@ -77,8 +96,7 @@ sf::Vector2f Player::rotate(sf::Vector2f &v, float angle)
 {
     return sf::Vector2f(
         v.x * std::cos(angle) - v.y * std::sin(angle),
-        v.x * std::sin(angle) + v.y * std::cos(angle)
-    );
+        v.x * std::sin(angle) + v.y * std::cos(angle));
 }
 
 void Player::rotateLeft(float speed)
@@ -95,17 +113,21 @@ void Player::rotateRight(float speed)
     camera = rotate(camera, speed);
 }
 
+// Use `entity` instead and made it 'abstract'
 struct Sprite {
     sf::Vector2f position;
     std::shared_ptr<sf::Image> texture;
 };
 
-class Raycaster {
+class Engine
+{
 private:
-    // move it to another class
-    sf::Uint8 *pixelBuffer;
+    std::unique_ptr<sf::Uint8> pixelBuffer;
+
+    // Use render texture thing from sfml?
     sf::Texture pixelBufferTex;
 
+    // use 2d zbuffer to fix sprites (it is a better solution actially)
     float ZBuffer[W];
 
     void plotPixel(int x, int y, sf::Color c);
@@ -113,45 +135,40 @@ private:
 public:
     std::vector<Sprite> sprites;
 
-    Raycaster()
+    Engine()
     {
-        pixelBuffer = new sf::Uint8[W * H * 4];
+        pixelBuffer.reset(new sf::Uint8[W * H * 4]);
         pixelBufferTex.create(W, H);
     };
-
-    ~Raycaster()
-    {
-        delete[] pixelBuffer;
-    }
 
     void renderFrame(sf::RenderWindow &window, Player &player, Map &map);
     void present(sf::RenderWindow &window);
 };
 
-void Raycaster::present(sf::RenderWindow &window)
+void Engine::present(sf::RenderWindow &window)
 {
-    pixelBufferTex.update(pixelBuffer);
+    pixelBufferTex.update(pixelBuffer.get());
     sf::Sprite s{pixelBufferTex};
     window.draw(s);
 }
 
-void Raycaster::plotPixel(int x, int y, sf::Color c)
+void Engine::plotPixel(int x, int y, sf::Color c)
 {
     unsigned int index = (y * (W * 4)) + (x * 4);
-    pixelBuffer[index] = c.r;
-    pixelBuffer[index + 1] = c.g;
-    pixelBuffer[index + 2] = c.b;
-    pixelBuffer[index + 3] = c.a;
+    pixelBuffer.get()[index] = c.r;
+    pixelBuffer.get()[index + 1] = c.g;
+    pixelBuffer.get()[index + 2] = c.b;
+    pixelBuffer.get()[index + 3] = c.a;
 }
 
-void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
+void Engine::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
 {
-    memset(pixelBuffer, 0, W * H * 4 * sizeof(sf::Uint8));
+    memset(pixelBuffer.get(), 0, W * H * 4 * sizeof(sf::Uint8));
 
     for (int x = 0; x < W; x++) {
         // x-coordinate in camera plane(line). 1 - top right, 0 - center,
         // -1 - top left
-        float camX = 2 * x / float(W) - 1;
+        const float camX = 2 * x / float(W) - 1;
 
         // ray direction
         auto rayDir = player.direction + camX * player.camera;
@@ -175,16 +192,14 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         if (rayDir.x < 0) {
             step.x = -1;
             sideDist.x = (player.position.x - map_.x) * deltaDist.x;
-        }
-        else {
+        } else {
             step.x = 1;
             sideDist.x = (map_.x + 1.0 - player.position.x) * deltaDist.x;
         }
         if (rayDir.y < 0) {
             step.y = -1;
             sideDist.y = (player.position.y - map_.y) * deltaDist.y;
-        }
-        else {
+        } else {
             step.y = 1;
             sideDist.y = (map_.y + 1.0 - player.position.y) * deltaDist.y;
         }
@@ -202,8 +217,7 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                 map_.x += step.x;
                 side = false;
                 perpWallDist = (sideDist.x - deltaDist.x);
-            }
-            else {
+            } else {
                 sideDist.y += deltaDist.y;
                 map_.y += step.y;
                 side = true;
@@ -232,8 +246,7 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         float wallX; // where the wall was hit
         if (!side) {
             wallX = player.position.y + perpWallDist * rayDir.y;
-        }
-        else {
+        } else {
             wallX = player.position.x + perpWallDist * rayDir.x;
         }
         wallX -= std::floor(wallX);
@@ -272,15 +285,14 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                     auto c = currentTile.ceiling->getPixel(floorTexX, floorTexY);
                     plotPixel(x, y, c);
                 }
-            }
-            else if (y >= drawStart && y <= drawEnd) { // walls
+            } else if (y >= drawStart && y <= drawEnd) { // walls
                 int texY = (int)texPos & (wallTexture->getSize().y - 1);
                 texPos += texStep;
 
                 auto c = wallTexture->getPixel(texX, texY);
                 plotPixel(x, y, c);
-            }
-            else { // floor
+                ZBuffer[x] = perpWallDist;
+            } else { // floor
                 float currentDist = (H + (2.0 * player.posZ)) / (2.0 * (y - player.pitch) - H);
 
                 // TEST
@@ -310,18 +322,19 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
                 }
             }
         }
-
-        ZBuffer[x] = perpWallDist;
     }
 
-    for (auto &sprite : sprites) {
+    for (const auto &sprite : sprites) {
         // position relative to camera
         sf::Vector2f pos = sprite.position - player.position;
 
+        // i'll write my own vector for this
+        float distance = std::sqrt(pos.x * pos.x + pos.y * pos.y);
+
         float invDet = 1.0f / (player.camera.x * player.direction.y - player.direction.x * player.camera.y);
 
-        float transformX = invDet * (player.direction.y * pos.x - player.direction.x * pos.y);
-        float transformY = invDet * (-player.camera.y * pos.x + player.camera.x * pos.y);
+        const float transformX = invDet * (player.direction.y * pos.x - player.direction.x * pos.y);
+        const float transformY = invDet * (-player.camera.y * pos.x + player.camera.x * pos.y);
 
         int spriteScreenX = int((W / 2) * (1 + transformX / transformY));
 
@@ -347,24 +360,20 @@ void Raycaster::renderFrame(sf::RenderWindow &window, Player &player, Map &map)
         if (drawEndX >= W)
             drawEndX = W - 1;
 
-        // loop through every vertical stripe of the sprite on screen
         for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
             int texX = int(256 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
-            // the conditions in the if are:
-            // 1) it's in front of camera plane so you don't see things behind you
-            // 2) it's on the screen (left)
-            // 3) it's on the screen (right)
-            // 4) ZBuffer, with perpendicular distance
-            if (transformY > 0 && stripe > 0 && stripe < W && transformY < ZBuffer[stripe])
-                for (int y = drawStartY; y < drawEndY; y++) // for every pixel of the current stripe
-                {
+            if (transformY > 0 && stripe > 0 && stripe < W && transformY < ZBuffer[stripe]) {
+                for (int y = drawStartY; y < drawEndY; y++) {
                     int d = (y - vMoveScreen) * 256 - H * 128 + spriteHeight * 128; // 256 and 128 factors to avoid floats
                     int texY = ((d * 64) / spriteHeight) / 256;
 
                     auto c = sprite.texture->getPixel(texX, texY);
-                    if (c.a != 0)
+                    if (c.a != 0) {
                         plotPixel(stripe, y, c);
+                        ZBuffer[stripe] = distance;
+                    }
                 }
+            }
         }
     }
 }
@@ -376,7 +385,7 @@ int main()
     sf::RenderWindow window(sf::VideoMode(W, H), "BESHRAY", sf::Style::Default);
 
     auto player = Player();
-    auto raycaster = Raycaster();
+    auto raycaster = Engine();
 
     std::chrono::high_resolution_clock::time_point start;
     std::chrono::high_resolution_clock::time_point end;
