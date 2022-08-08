@@ -1,36 +1,35 @@
 #pragma once
 
+#include "math/vector.h++"
+#include "texture.h++"
 #include <SFML/Graphics/Image.hpp>
-#include <SFML/System/Vector2.hpp>
-#include <cstddef>
+#include <array>
 #include <memory>
 #include <vector>
 
-class Tile {
-   private:
-    Tile();
-
-   public:
-    const bool isWall;
-
-    std::shared_ptr<sf::Image> wall;
-    std::shared_ptr<sf::Image> ceiling;
-    std::shared_ptr<sf::Image> floor;
-
-    Tile(bool isWall, std::shared_ptr<sf::Image> wall, std::shared_ptr<sf::Image> ceiling, std::shared_ptr<sf::Image> floor)
-        : isWall(isWall), wall(wall), ceiling(ceiling), floor(floor){};
-};
+namespace beshray {
 
 class Map {
-   private:
-    Map();
+  public:
+    unsigned w, h;
+    Vec2i spawnLocation;
 
+    struct Tile {
+        Tile() = default;
+
+        bool isSolid = false;
+
+        enum class Side { East, North, West, South, Floor, Ceiling };
+        std::array<Texture, 6> texture{nullptr};
+    };
+
+    Map() = default;
+    Map(const std::string &filename);
+    [[nodiscard]] const Tile &getTile(const unsigned x, const unsigned y) const { return tiles[x + y * w]; };
+    [[nodiscard]] const Tile &getTile(const Vec2i pos) const { return tiles[pos.x + pos.y * w]; };
+
+  private:
     std::vector<Tile> tiles;
-
-   public:
-    size_t w, h;
-    sf::Vector2f spawnLocation;
-
-    Map(const std::string& filename);
-    Tile& getTile(const size_t x, const size_t y);
 };
+
+} // namespace beshray

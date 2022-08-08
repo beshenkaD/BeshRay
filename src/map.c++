@@ -1,4 +1,5 @@
 #include "map.h++"
+#include "json.h++"
 #include <SFML/Graphics/Image.hpp>
 #include <cstddef>
 #include <cstdlib>
@@ -6,11 +7,13 @@
 #include <iostream>
 #include <memory>
 #include <vector>
-#include "json.h++"
+
+namespace beshray {
 
 using namespace nlohmann;
 
-Map::Map(const std::string& filename) {
+Map::Map(const std::string &filename)
+{
     std::ifstream i(filename);
     json j;
 
@@ -18,15 +21,14 @@ Map::Map(const std::string& filename) {
 
     w = j["properties"]["w"];
     h = j["properties"]["h"];
-    spawnLocation = sf::Vector2f(j["properties"]["spawn"][0], j["properties"]["spawn"][1]);
+    spawnLocation = {j["properties"]["spawn"][0], j["properties"]["spawn"][1]};
 
     // TODO: use os-indpendent way to concatenate paths
     std::vector<std::shared_ptr<sf::Image>> textures;
-    for (auto& rawPath : j["textures"]) {
+    for (auto &rawPath : j["textures"]) {
         sf::Image tex;
 
-        std::string path = rawPath.get<std::string>();
-        path = "../resources/" + path;
+        auto path = "../resources/" + rawPath.get<std::string>();
 
         if (!tex.loadFromFile(path)) {
             abort();
@@ -47,15 +49,21 @@ Map::Map(const std::string& filename) {
             auto ceilingTex = (ceiling[i] < 0) ? nullptr : textures[ceiling[i]];
             auto floorTex = (floor[i] < 0) ? nullptr : textures[floor[i]];
 
-            tiles.push_back(Tile(wall, wallTex, ceilingTex, floorTex));
+            Tile t{};
+            t.texture.fill(wallTex);
+            t.texture[(int)Tile::Side::Ceiling] = ceilingTex;
+            t.texture[(int)Tile::Side::Floor] = floorTex;
+
+            t.isSolid = wall;
+
+            tiles.push_back(t);
         }
-    } else {
+    }
+    else {
         abort();
     }
 
     i.close();
 }
 
-Tile& Map::getTile(const size_t x, const size_t y) {
-    return tiles[x + y * w];
-}
+} // namespace beshray

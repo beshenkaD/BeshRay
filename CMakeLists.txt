@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.5)
 
 project(beshray)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(SOURCES
     src/main.c++
     src/map.c++
+    src/engine.c++
+    src/texture.c++
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
