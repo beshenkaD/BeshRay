@@ -1,7 +1,5 @@
 #include "engine.h++"
 #include "map.h++"
-#include <SFML/Graphics/Color.hpp>
-#include <SFML/Window/Keyboard.hpp>
 #include <cmath>
 
 #include <chrono>
@@ -23,13 +21,15 @@
 
 int main()
 {
-    auto engine = beshray::Engine();
+    auto engine = beshray::Engine(1280, 720);
 
     engine.map = beshray::Map("../map1.json");
     engine.camera = beshray::Camera();
 
     engine.camera.pos.x = 5;
     engine.camera.pos.y = 12;
+
+    engine.setInterlacing(false);
 
     sf::RenderWindow window(sf::VideoMode(engine.width, engine.height), "BESHRAY", sf::Style::Default);
 
@@ -47,11 +47,11 @@ int main()
 
     std::shared_ptr<sf::Image> barrel = std::make_shared<sf::Image>(b);
 
-    engine.entities.push_back(beshray::Entity{{5, 13}, barrel});
-    engine.entities.push_back(beshray::Entity{{6, 12}, barrel});
-    engine.entities.push_back(beshray::Entity{{5, 12.5}, barrel});
-    engine.entities.push_back(beshray::Entity{{6, 13.5}, barrel});
-    engine.entities.push_back(beshray::Entity{{8, 12}, barrel});
+    engine.entities.push_back(beshray::Entity{{5, 13}, 1, 1, barrel});
+    engine.entities.push_back(beshray::Entity{{6, 12}, 1, 1, barrel});
+    engine.entities.push_back(beshray::Entity{{5, 12.5}, 1, 1, barrel});
+    engine.entities.push_back(beshray::Entity{{6, 13.5}, 1, 1, barrel});
+    engine.entities.push_back(beshray::Entity{{8, 12}, 1, 1, barrel});
 
     while (window.isOpen()) {
         start = std::chrono::high_resolution_clock::now();
@@ -61,20 +61,20 @@ int main()
             if (event.type == sf::Event::Closed)
                 window.close();
 
-            // if (event.type == sf::Event::KeyPressed) {
-            //     if (event.key.code == sf::Keyboard::W)
-            //         engine.camera.move(0.2);
-            //     if (event.key.code == sf::Keyboard::S)
-            //         engine.camera.move(-0.13);
-            //     if (event.key.code == sf::Keyboard::D)
-            //         engine.camera.rotate(-0.05);
-            //     if (event.key.code == sf::Keyboard::A)
-            //         engine.camera.rotate(0.05);
-            //     if (event.key.code == sf::Keyboard::Up)
-            //         engine.camera.tilt(5);
-            //     if (event.key.code == sf::Keyboard::Down)
-            //         engine.camera.tilt(-5);
-            // }
+            if (event.type == sf::Event::KeyPressed) {
+                //     if (event.key.code == sf::Keyboard::W)
+                //         engine.camera.move(0.2);
+                //     if (event.key.code == sf::Keyboard::S)
+                //         engine.camera.move(-0.13);
+                //     if (event.key.code == sf::Keyboard::D)
+                //         engine.camera.rotate(-0.05);
+                //     if (event.key.code == sf::Keyboard::A)
+                //         engine.camera.rotate(0.05);
+                if (event.key.code == sf::Keyboard::Up)
+                    engine.camera.tilt(5);
+                if (event.key.code == sf::Keyboard::Down)
+                    engine.camera.tilt(-5);
+            }
         }
 
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
@@ -95,10 +95,14 @@ int main()
         engine.present(window);
 
         end = std::chrono::high_resolution_clock::now();
-        // fps = (float)1e9 / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        fps = (float)1e9 / (float)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
-        // sf::Text t(std::to_string(fps), font);
-        // window.draw(t);
+        sf::Text t(std::to_string(fps), font);
+        t.setFillColor(sf::Color::Yellow);
+        t.setOutlineThickness(5);
+        t.setOutlineColor(sf::Color::Black);
+
+        window.draw(t);
 
         window.display();
     }

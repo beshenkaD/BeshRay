@@ -6,7 +6,6 @@
 #include "texture.h++"
 
 #include <SFML/Graphics.hpp>
-#include <SFML/Graphics/Image.hpp>
 #include <optional>
 #include <vector>
 
@@ -30,13 +29,12 @@ struct Camera {
     };
 };
 
-class Entity {
-  public:
+struct Entity {
     Vec2f pos = {0, 0};
+    float w = 1, h = 1;
     Texture texture = nullptr;
 };
 
-// TODO: maybe set camera and map in engine, and change it if needed
 class Engine {
   public:
     const int width, height;
@@ -52,22 +50,25 @@ class Engine {
     void render();
     void present(sf::RenderWindow &window);
 
+    void setInterlacing(bool enable)
+    {
+        interlacing = enable;
+        if (!enable)
+            step = 1;
+    }
+
     Camera camera;
     Map map;
 
   private:
     std::unique_ptr<sf::Uint8> pixelBuffer;
     sf::Texture pixelBufferTex;
+
     std::vector<float> ZBuffer;
 
-    inline void plotPixel(const unsigned x, const unsigned y, const sf::Color c) const;
-
-    using Tile = Map::Tile;
-    using Side = Tile::Side;
-    inline const sf::Color shadeSolidPixel(const Tile &, const Side, const Vec2f, const float) const;
-    inline const sf::Color shadeEntityPixel(const Entity &entity, Vec2f sample, float distance) const;
-
-    void renderStripe(const int x);
+    bool interlacing = true;
+    int factor = 0;
+    int step = 2;
 
     struct Intersection {
         Vec2i tilePos = {0, 0};
@@ -77,6 +78,8 @@ class Engine {
         Map::Tile::Side side = Map::Tile::Side::East;
     };
 
+    inline void plotPixel(const unsigned x, const unsigned y, const sf::Color c) const;
+    void renderWorld(const int from, const int to);
     const std::optional<Intersection> castRay(const Vec2f origin, const Vec2f dir) const;
 };
 
