@@ -1,54 +1,58 @@
 #pragma once
 
+#include "camera.h++"
+#include "framebuffer.h++"
 #include "map.h++"
-#include "math/vector.h++"
-#include "memory"
-#include "texture.h++"
 
-#include <SFML/Graphics.hpp>
 #include <optional>
-#include <vector>
 
 namespace beshray {
+namespace _ {
 
-struct Camera {
-    Vec2f pos = {0, 0};
-    Vec2f dir = {-1, 0};
-    Vec2f plane = {0, 1};
+struct ZBuffer {
+  public:
+    ZBuffer(const unsigned w) : buffer(new float[w]){};
 
-    float pitch = 0;
-    float height = 0;
+    inline void set(const int x, const float distance) { buffer[x] = distance; }
+    inline float get(const int x) { return buffer[x]; }
 
-    void move(float speed) { pos += dir * speed; };
-    void tilt(float speed) { pitch += speed; };
-    void lift(float speed) { height += speed; };
-    void rotate(float angle)
-    {
-        dir = dir.rotate(angle);
-        plane = plane.rotate(angle);
-    };
+  private:
+    const std::unique_ptr<float[]> buffer; // NOLINT
 };
 
-struct Entity {
+} // namespace _
+
+class Sprite {
+  public:
+    Sprite() = default;
+    Sprite(Vec2f p, Texture t) : pos(p), texture(std::move(t)){};
+
     Vec2f pos = {0, 0};
-    float w = 1, h = 1;
     Texture texture = nullptr;
+    bool visible = true;
+
+  private:
+    Vec2f relativePos{0, 0};
+    Vec2f transform{0, 0};
+
+    friend class Engine;
 };
 
+// TODO:
+// 1. add framebuffer class
+// 2. add config
 class Engine {
   public:
-    const int width, height;
+    const unsigned width, height;
 
-    std::vector<Entity> entities;
+    std::vector<Sprite> sprites;
 
-    Engine(const int w = 960, const int h = 540) : width(w), height(h), pixelBuffer(new sf::Uint8[w * h * 4])
-    {
-        pixelBufferTex.create(w, h);
-        ZBuffer.reserve(w * h);
-    };
+    Camera camera;
 
-    void render();
-    void present(sf::RenderWindow &window);
+    Map map;
+
+  public:
+    Engine(const unsigned w, const unsigned h) : width(w), height(h){};
 
     void setInterlacing(bool enable)
     {
@@ -57,18 +61,19 @@ class Engine {
             step = 1;
     }
 
-    Camera camera;
-    Map map;
+    void render();
+    int start(const std::string &appName);
+
+    virtual bool onCreate() = 0;
+    virtual void onUpdate(float deltaTime) = 0;
 
   private:
-    std::unique_ptr<sf::Uint8> pixelBuffer;
-    sf::Texture pixelBufferTex;
+    _::FrameBuffer framebuffer{width, height};
+    _::ZBuffer ZBuffer{width};
 
-    std::vector<float> ZBuffer;
-
-    bool interlacing = true;
+    bool interlacing = false;
     int factor = 0;
-    int step = 2;
+    int step = 1;
 
     struct Intersection {
         Vec2i tilePos = {0, 0};
@@ -78,9 +83,11 @@ class Engine {
         Map::Tile::Side side = Map::Tile::Side::East;
     };
 
-    inline void plotPixel(const unsigned x, const unsigned y, const sf::Color c) const;
-    void renderWorld(const int from, const int to);
-    const std::optional<Intersection> castRay(const Vec2f origin, const Vec2f dir) const;
+  private:
+    inline void renderWorld();
+    inline void sortSprites();
+    inline void renderSprites();
+    [[nodiscard]] const std::optional<Intersection> castRay(const Vec2f origin, const Vec2f dir) const;
 };
 
 } // namespace beshray

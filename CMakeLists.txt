@@ -9,6 +9,8 @@ set(SOURCES
     src/map.c++
     src/engine.c++
     src/texture.c++
+    src/camera.c++
+    src/framebuffer.c++
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

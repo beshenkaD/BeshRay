@@ -2,64 +2,17 @@
 #include "map.h++"
 #include "math/vector.h++"
 
-#include <SFML/Graphics.hpp>
-#include <cmath>
-#include <cstring>
-#include <iostream>
-#include <limits>
-#include <memory>
+#include <chrono>
 #include <optional>
-#include <vector>
 
 namespace beshray {
 
 using Tile = Map::Tile;
 using Side = Tile::Side;
 
-// const sf::Color Engine::shadeSolidPixel(const Tile &tile, const Side side, const Vec2f sample, const float dist)
-// const
-// {
-//     auto texture = tile.texture[(int)side];
-//     if (!texture)
-//         return sf::Color::Transparent;
-
-//     int texX = int(sample.x * texture->getSize().x) & (texture->getSize().x - 1);
-//     int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
-
-//     auto pixel = texture->getPixel(texX, texY);
-
-//     float fog = 1.0f - std::min(dist / 16.0f, 1.0f);
-
-//     pixel.r = sf::Uint8(float(pixel.r) * fog);
-//     pixel.g = sf::Uint8(float(pixel.g) * fog);
-//     pixel.b = sf::Uint8(float(pixel.b) * fog);
-
-//     return pixel;
-// }
-
-// const sf::Color Engine::shadeEntityPixel(const Entity &entity, const Vec2f sample, const float distance) const
-// {
-//     auto texture = entity.texture;
-//     if (!texture)
-//         return sf::Color::Transparent;
-
-//     int texX = int(sample.x * texture->getSize().x) & (texture->getSize().x - 1);
-//     int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
-
-//     auto pixel = texture->getPixel(texX, texY);
-
-//     float fog = 1.0f - std::min(distance / 16.0f, 1.0f);
-
-//     pixel.r = sf::Uint8(float(pixel.r) * fog);
-//     pixel.g = sf::Uint8(float(pixel.g) * fog);
-//     pixel.b = sf::Uint8(float(pixel.b) * fog);
-
-//     return pixel;
-// }
-
-void Engine::renderWorld(const int from, const int to)
+inline void Engine::renderWorld()
 {
-    for (int x = from + factor; x < to; x += step) {
+    for (unsigned x = 0 + factor; x < width; x += step) {
         // x-coordinate in camera plane
         float camX = 2 * x / float(width) - 1;
 
@@ -80,13 +33,8 @@ void Engine::renderWorld(const int from, const int to)
         int lineHeight = int(height / wallDist);
 
         // calculate lowest and highest pixel to fill in current stripe
-        int drawStart = -(lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist);
-        if (drawStart < 0)
-            drawStart = 0;
-
-        int drawEnd = (lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist);
-        if (drawEnd >= height)
-            drawEnd = height - 1;
+        int drawStart = std::max(int(-(lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist)), 0);
+        int drawEnd = std::min(int((lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist)), int(height));
 
         for (int y = 0; y <= drawStart - 1; y++) {
             float currentDist = (height - (2.0 * camera.height)) / (height - 2.0 * (y - camera.pitch));
@@ -98,7 +46,7 @@ void Engine::renderWorld(const int from, const int to)
 
             auto texture = currentTile.texture[(int)Side::Ceiling];
             if (!texture) {
-                plotPixel(x, y, sf::Color{135, 206, 235});
+                framebuffer.setPixel(x, y, sf::Color(135, 206, 235));
                 continue;
             }
 
@@ -108,13 +56,12 @@ void Engine::renderWorld(const int from, const int to)
             int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
 
             auto pixel = texture->getPixel(texX, texY);
-            plotPixel(x, y, pixel);
+            framebuffer.setPixel(x, y, pixel);
         }
 
         // calculate texture sample for y coordinate
         float texStep = 1.0f / lineHeight;
-        float sampleY =
-            (drawStart - camera.pitch - (camera.height / wallDist) - (height / 2) + (lineHeight / 2)) * texStep;
+        float sampleY = (drawStart - camera.pitch - (camera.height / wallDist) - (height / 2) + (lineHeight / 2)) * texStep;
 
         for (int y = drawStart; y <= drawEnd + 1; y++) {
             sampleY += texStep;
@@ -123,11 +70,12 @@ void Engine::renderWorld(const int from, const int to)
             int texY = int(sampleY * texture->getSize().y) & (texture->getSize().y - 1);
 
             const auto pixel = texture->getPixel(texX, texY);
-            plotPixel(x, y, pixel);
-            ZBuffer[y * width + x] = wallDist;
+            framebuffer.setPixel(x, y, pixel);
         }
 
-        for (int y = drawEnd + 1; y <= height; y++) {
+        ZBuffer.set(x, wallDist);
+
+        for (unsigned y = drawEnd + 1; y <= height; y++) {
             float currentDist = (height + (2.0 * camera.height)) / (2.0 * (y - camera.pitch) - height);
 
             Vec2f planePoint = camera.pos + rayDir * currentDist;
@@ -136,9 +84,10 @@ void Engine::renderWorld(const int from, const int to)
             const auto &currentTile = map.getTile(planeTile.x, planeTile.y);
 
             auto texture = currentTile.texture[(int)Side::Floor];
-            // if (!texture) {
-            //     continue;
-            // }
+            if (!texture) {
+                framebuffer.setPixel(x, y, sf::Color::Black);
+                continue;
+            }
 
             Vec2f sample = planePoint - static_cast<Vec2f>(planeTile);
 
@@ -146,45 +95,56 @@ void Engine::renderWorld(const int from, const int to)
             int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
 
             auto pixel = texture->getPixel(texX, texY);
-            plotPixel(x, y, pixel);
+            framebuffer.setPixel(x, y, pixel);
         }
     }
+}
 
-    for (const auto &entity : entities) {
+inline void Engine::sortSprites()
+{
+    for (auto &sprite : sprites) {
+        if (!sprite.visible) {
+            continue;
+        }
+
         // position relative to camera
-        Vec2f entityPos = entity.pos - camera.pos;
+        Vec2f entityPos = sprite.pos - camera.pos;
 
         float invDet = 1.0f / (camera.plane.x * camera.dir.y - camera.dir.x * camera.plane.y);
 
         float transformX = invDet * (camera.dir.y * entityPos.x - camera.dir.x * entityPos.y);
-        float transformY = invDet * (-camera.plane.y * entityPos.x + camera.plane.x * entityPos.y); // z
+        float transformY = invDet * (-camera.plane.y * entityPos.x + camera.plane.x * entityPos.y); // depth
+
+        sprite.relativePos = entityPos;
+        sprite.transform = Vec2f{transformX, transformY};
+    }
+
+    std::sort(sprites.begin(), sprites.end(),
+              [](const Sprite &a, const Sprite &b) -> bool { return a.transform.y > b.transform.y; });
+}
+
+// TODO: optimize
+inline void Engine::renderSprites()
+{
+    for (const auto &sprite : sprites) {
+        float transformX = sprite.transform.x;
+        float transformY = sprite.transform.y;
 
         if (transformY <= 0.5) {
             continue;
         }
 
+        int vMoveScreen = camera.pitch + camera.height / transformY;
         int spriteScreenX = int((width / 2) * (1 + transformX / transformY));
 
-        int vMoveScreen = int(transformY) + camera.pitch + camera.height / transformY;
-
         int spriteHeight = std::abs(int(height / (transformY)));
+        int spriteWidth = spriteHeight;
 
-        int drawStartY = -spriteHeight / 2 + height / 2 + vMoveScreen;
-        if (drawStartY < 0)
-            drawStartY = 0;
+        int drawStartY = std::max(int(-spriteHeight / 2 + height / 2 + vMoveScreen), 0);
+        int drawEndY = std::min(spriteHeight / 2 + height / 2 + vMoveScreen, height);
 
-        int drawEndY = spriteHeight / 2 + height / 2 + vMoveScreen;
-        if (drawEndY >= height)
-            drawEndY = height - 1;
-
-        int spriteWidth = abs(int(height / (transformY)));
-        int drawStartX = -spriteWidth / 2 + spriteScreenX;
-        if (drawStartX < 0)
-            drawStartX = 0;
-
-        int drawEndX = spriteWidth / 2 + spriteScreenX;
-        if (drawEndX >= width)
-            drawEndX = width - 1;
+        int drawStartX = std::max(-spriteWidth / 2 + spriteScreenX, 0);
+        int drawEndX = std::min(spriteWidth / 2 + spriteScreenX, int(width));
 
         if (interlacing) {
             if ((drawStartX % 2 == 0 && factor == 1) || (drawStartX % 2 != 0 && factor == 0)) {
@@ -193,22 +153,19 @@ void Engine::renderWorld(const int from, const int to)
         }
 
         for (int x = drawStartX; x < drawEndX; x += step) {
-            if (transformY > 0 && x > 0 && x < width) {
-                for (int y = drawStartY; y < drawEndY; y++) {
-                    if (transformY > ZBuffer[y * width + x]) {
-                        break;
-                    }
+            if (ZBuffer.get(x) < transformY) {
+                continue;
+            }
 
-                    int texX = int(256 * (x - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
-                    int d = (y - vMoveScreen) * 256 - height * 128 + spriteHeight * 128;
-                    int texY = ((d * 64) / spriteHeight) / 256;
+            for (int y = drawStartY; y < drawEndY; y++) {
+                int texX = int(256 * (x - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
+                int d = (y - vMoveScreen) * 256 - height * 128 + spriteHeight * 128;
+                int texY = ((d * 64) / spriteHeight) / 256;
 
-                    auto pixel = entity.texture->getPixel(texX, texY);
+                auto pixel = sprite.texture->getPixel(texX, texY);
 
-                    if (pixel.a != 0) {
-                        plotPixel(x, y, pixel);
-                        ZBuffer[y * width + x] = transformY;
-                    }
+                if (pixel.a == 255) {
+                    framebuffer.setPixel(x, y, pixel);
                 }
             }
         }
@@ -217,92 +174,17 @@ void Engine::renderWorld(const int from, const int to)
 
 void Engine::render()
 {
-    for (int i = 0; i < width * height; i++) {
-        ZBuffer[i] = std::numeric_limits<float>::infinity();
-    }
-
     if (interlacing)
         factor ^= 1;
 
-    renderWorld(0, width);
-
-    // for (const auto &task : tasks) {
-    //     pool.push_task(&Engine::renderWorld, this, task.from, task.to);
-    // }
-
-    // pool.wait_for_tasks();
-
-    // std::vector<std::pair<float, int>> sprites(entities.size());
-
-    // for (unsigned i = 0; i < entities.size(); i++) {
-    //     sprites[i].first = (entities[i].pos - camera.pos).len();
-    //     sprites[i].second = i;
-    // }
-
-    // std::ranges::sort(sprites, std::ranges::greater());
-
-    // for (unsigned i = 0; i < entities.size(); i++) {
-    //     const auto entity = entities[sprites[i].second];
-    //     const float distance = sprites[i].first;
-
-    //     // position relative to camera
-    //     Vec2f entityPos = entity.pos - camera.pos;
-
-    //     float invDet = 1.0f / (camera.plane.x * camera.dir.y - camera.dir.x * camera.plane.y);
-
-    //     float transformX = invDet * (camera.dir.y * entityPos.x - camera.dir.x * entityPos.y);
-    //     float transformY = invDet * (-camera.plane.y * entityPos.x + camera.plane.x * entityPos.y);
-
-    //     int spriteScreenX = int((height) * (1 + transformX / transformY));
-
-    //     constexpr float vDiv = 1.0f;
-    //     constexpr float uDiv = 1.0f;
-    //     constexpr float vMove = 0.0f;
-    //     int vMoveScreen = int(vMove / transformY) + camera.pitch + camera.height / transformY;
-
-    //     int spriteHeight = std::abs(int(height / (transformY))) / vDiv;
-
-    //     int drawStartY = -spriteHeight / 2 + height / 2 + vMoveScreen;
-    //     if (drawStartY < 0)
-    //         drawStartY = 0;
-    //     int drawEndY = spriteHeight / 2 + height / 2 + vMoveScreen;
-    //     if (drawEndY >= height)
-    //         drawEndY = height - 1;
-
-    //     int spriteWidth = abs(int(height / (transformY))) / uDiv;
-    //     int drawStartX = -spriteWidth / 2 + spriteScreenX;
-    //     if (drawStartX < 0)
-    //         drawStartX = 0;
-    //     int drawEndX = spriteWidth / 2 + spriteScreenX;
-    //     if (drawEndX >= width)
-    //         drawEndX = width - 1;
-
-    //     for (int stripe = drawStartX; stripe < drawEndX; stripe++) {
-    //         int texX = int(256 * (stripe - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
-
-    //         if (transformY > 0 && stripe > 0 && stripe < width && transformY < ZBuffer[stripe]) {
-    //             for (int y = drawStartY; y < drawEndY; y++) {
-    //                 int d = (y - vMoveScreen) * 256 - height * 128 + spriteHeight * 128;
-
-    //                 int texY = ((d * 64) / spriteHeight) / 256;
-
-    //                 // auto pix = shadeEntityPixel(entity, {static_cast<float>(texX), static_cast<float>(texY)},
-    //                 // distance);
-
-    //                 // texX = int(texX * entity.texture->getSize().x) & (entity.texture->getSize().x - 1);
-    //                 // texY = int(texY * entity.texture->getSize().y) & (entity.texture->getSize().y - 1);
-
-    //                 auto pixel = entity.texture->getPixel(texX, texY);
-
-    //                 if (pixel.a != 0) {
-    //                     plotPixel(stripe, y, pixel);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+    renderWorld();
+    sortSprites();
+    renderSprites();
 }
 
+// TODO:
+// 1. add intesection point
+// 2. detect wall side
 const std::optional<Engine::Intersection> Engine::castRay(const Vec2f origin, const Vec2f dir) const
 {
     const float maxDistance = 100.0f;
@@ -356,35 +238,52 @@ const std::optional<Engine::Intersection> Engine::castRay(const Vec2f origin, co
 
             hit.distance = isSide ? (sideDist.y - deltaDist.y) : (sideDist.x - deltaDist.x);
 
-            if (!isSide) {
-                hit.sampleX = origin.y + hit.distance * dir.y;
+            if (isSide) {
+                hit.sampleX = origin.x + hit.distance * dir.x;
             }
             else {
-                hit.sampleX = origin.x + hit.distance * dir.x;
+                hit.sampleX = origin.y + hit.distance * dir.y;
             }
             hit.sampleX -= std::floor(hit.sampleX);
         }
     }
 
-    if (isWallHit)
-        return hit;
-
-    return {};
+    return isWallHit ? hit : std::optional<Intersection>{};
 }
 
-void Engine::present(sf::RenderWindow &window)
+int Engine::start(const std::string &appName)
 {
-    pixelBufferTex.update(pixelBuffer.get());
-    sf::Sprite s{pixelBufferTex};
-    window.draw(s);
-}
+    if (!onCreate()) {
+        return 1;
+    }
 
-inline void Engine::plotPixel(const unsigned x, const unsigned y, const sf::Color c) const
-{
-    pixelBuffer.get()[(y * (width * 4)) + (x * 4)] = c.r;
-    pixelBuffer.get()[((y * (width * 4)) + (x * 4)) + 1] = c.g;
-    pixelBuffer.get()[((y * (width * 4)) + (x * 4)) + 2] = c.b;
-    pixelBuffer.get()[((y * (width * 4)) + (x * 4)) + 3] = c.a;
+    sf::RenderWindow window(sf::VideoMode(width, height), appName, sf::Style::Default);
+
+    std::chrono::steady_clock::time_point previous;
+
+    while (window.isOpen()) {
+        auto now = std::chrono::steady_clock::now();
+        auto deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - previous).count() / 1'000'000.0f;
+
+        sf::Event event{};
+
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+            }
+        }
+
+        window.clear();
+
+        onUpdate(deltaTime);
+
+        framebuffer.present(window);
+        window.display();
+
+        previous = now;
+    }
+
+    return 0;
 }
 
 } // namespace beshray

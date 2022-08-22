@@ -9,9 +9,10 @@
 
 namespace beshray {
 
+// TODO: use something like this: https://maniacsvault.net/ecwolf/wiki/Universal_Wolfenstein_Map_Format
 class Map {
   public:
-    unsigned w, h;
+    unsigned w{}, h{};
     Vec2i spawnLocation;
 
     struct Tile {
