@@ -1,4 +1,7 @@
 #include "engine.h++"
+#include <chrono>
+#include <cmath>
+#include <iostream>
 
 // TODO: move DDA to another function +
 //       my own vec2 with implicit convertion to sfml vectors +
@@ -9,16 +12,17 @@
 class ExampleGame : public beshray::Engine {
   public:
     ExampleGame(const unsigned w = 960, const unsigned h = 540) : beshray::Engine(w, h) {}
+    ~ExampleGame() override = default;
 
     bool onCreate() override
     {
         map = beshray::Map("../map1.json");
-        camera = beshray::Camera(5, 12, 120);
+        camera = beshray::Camera(5, 12, 120, 0, 0);
 
         sf::Image b;
         b.loadFromFile("../resources/barrel.png");
 
-        std::shared_ptr<sf::Image> barrel = std::make_shared<sf::Image>(b);
+        auto barrel = std::make_shared<sf::Image>(b);
 
         sprites.push_back(beshray::Sprite{{5, 13}, barrel});
         sprites.push_back(beshray::Sprite{{6, 12}, barrel});
@@ -26,10 +30,11 @@ class ExampleGame : public beshray::Engine {
         sprites.push_back(beshray::Sprite{{6, 13.5}, barrel});
         sprites.push_back(beshray::Sprite{{8, 12}, barrel});
 
+        setInterlacing(true);
         return true;
     }
 
-    void onUpdate(float deltaTime) override
+    void onUpdate(const float deltaTime) override
     {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
             camera.move(5 * deltaTime);

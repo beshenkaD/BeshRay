@@ -53,19 +53,19 @@ class Engine {
 
   public:
     Engine(const unsigned w, const unsigned h) : width(w), height(h){};
+    virtual ~Engine() = default;
 
     void setInterlacing(bool enable)
     {
         interlacing = enable;
-        if (!enable)
-            step = 1;
+        step = enable ? 2 : 1;
     }
 
     void render();
     int start(const std::string &appName);
 
     virtual bool onCreate() = 0;
-    virtual void onUpdate(float deltaTime) = 0;
+    virtual void onUpdate(const float deltaTime) = 0;
 
   private:
     _::FrameBuffer framebuffer{width, height};

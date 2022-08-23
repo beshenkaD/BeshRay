@@ -3,6 +3,7 @@
 #include "math/vector.h++"
 
 #include <chrono>
+#include <iostream>
 #include <optional>
 
 namespace beshray {
@@ -30,10 +31,11 @@ inline void Engine::renderWorld()
         float wallDist = intersection->distance;
 
         // Calculate height of line to draw on screen
-        int lineHeight = int(height / wallDist);
+        int lineHeight = height / wallDist;
 
+        // TODO: fix drawStart when camera.height != 0
         // calculate lowest and highest pixel to fill in current stripe
-        int drawStart = std::max(int(-(lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist)), 0);
+        int drawStart = std::max(int(-lineHeight / 2 + height / 2 + camera.pitch + (camera.height / wallDist)), 0);
         int drawEnd = std::min(int((lineHeight / 2) + (height / 2) + camera.pitch + (camera.height / wallDist)), int(height));
 
         for (int y = 0; y <= drawStart - 1; y++) {
@@ -55,8 +57,7 @@ inline void Engine::renderWorld()
             int texX = int(sample.x * texture->getSize().x) & (texture->getSize().x - 1);
             int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
 
-            auto pixel = texture->getPixel(texX, texY);
-            framebuffer.setPixel(x, y, pixel);
+            framebuffer.setPixel(x, y, texture->getPixel(texX, texY));
         }
 
         // calculate texture sample for y coordinate
@@ -69,8 +70,7 @@ inline void Engine::renderWorld()
             int texX = int(intersection->sampleX * texture->getSize().x) & (texture->getSize().x - 1);
             int texY = int(sampleY * texture->getSize().y) & (texture->getSize().y - 1);
 
-            const auto pixel = texture->getPixel(texX, texY);
-            framebuffer.setPixel(x, y, pixel);
+            framebuffer.setPixel(x, y, texture->getPixel(texX, texY));
         }
 
         ZBuffer.set(x, wallDist);
@@ -94,8 +94,7 @@ inline void Engine::renderWorld()
             int texX = int(sample.x * texture->getSize().x) & (texture->getSize().x - 1);
             int texY = int(sample.y * texture->getSize().y) & (texture->getSize().y - 1);
 
-            auto pixel = texture->getPixel(texX, texY);
-            framebuffer.setPixel(x, y, pixel);
+            framebuffer.setPixel(x, y, texture->getPixel(texX, texY));
         }
     }
 }
@@ -162,7 +161,7 @@ inline void Engine::renderSprites()
                 int d = (y - vMoveScreen) * 256 - height * 128 + spriteHeight * 128;
                 int texY = ((d * 64) / spriteHeight) / 256;
 
-                auto pixel = sprite.texture->getPixel(texX, texY);
+                const auto pixel = sprite.texture->getPixel(texX, texY);
 
                 if (pixel.a == 255) {
                     framebuffer.setPixel(x, y, pixel);
@@ -238,12 +237,7 @@ const std::optional<Engine::Intersection> Engine::castRay(const Vec2f origin, co
 
             hit.distance = isSide ? (sideDist.y - deltaDist.y) : (sideDist.x - deltaDist.x);
 
-            if (isSide) {
-                hit.sampleX = origin.x + hit.distance * dir.x;
-            }
-            else {
-                hit.sampleX = origin.y + hit.distance * dir.y;
-            }
+            hit.sampleX = isSide ? (origin.x + hit.distance * dir.x) : (origin.y + hit.distance * dir.y);
             hit.sampleX -= std::floor(hit.sampleX);
         }
     }
