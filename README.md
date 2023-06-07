@@ -1,5 +1,6 @@
 # BeshRay
 Raycasting render engine
+![screenshot](./_images/beshray.jpg)
 
 # TODO
 - [ ] Refactor raycasting algorithm
